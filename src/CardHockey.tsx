@@ -78,6 +78,10 @@ export const CardHockey: React.FC<{
   tournamentSchedule?: React.ReactNode;
   nextMatchLabel?: string;
   onRestartSeason?: () => void;
+  onSaveTournament?: () => void;
+  onRestoreTournament?: () => void;
+  onExportBackup?: () => void;
+  onImportBackup?: () => void;
 }> = ({ 
   onBack,
   isTournament,
@@ -88,7 +92,11 @@ export const CardHockey: React.FC<{
   tournamentTable,
   tournamentSchedule,
   nextMatchLabel,
-  onRestartSeason
+  onRestartSeason,
+  onSaveTournament,
+  onRestoreTournament,
+  onExportBackup,
+  onImportBackup
 }) => {
   const [deck, setDeck] = useState<CardData[]>([]);
   const [discard, setDiscard] = useState<CardData[]>([]);
@@ -100,7 +108,10 @@ export const CardHockey: React.FC<{
   const [scores, setScores] = useState<{user: number, app: number}[]>([
     {user: 0, app: 0}, {user: 0, app: 0}, {user: 0, app: 0}
   ]);
-  const [status, setStatus] = useState<'playing' | 'gameover' | 'animating' | 'period_over'>('playing');
+  const [shots, setShots] = useState<{user: number, app: number}[]>([
+    {user: 0, app: 0}, {user: 0, app: 0}, {user: 0, app: 0}
+  ]);
+  const [status, setStatus] = useState<'playing' | 'gameover' | 'animating' | 'period_over' | 'ready_to_start'>('ready_to_start');
   const [message, setMessage] = useState('Your Turn! Draw a card.');
   const [showRules, setShowRules] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -115,6 +126,8 @@ export const CardHockey: React.FC<{
 
   const totalUserScore = scores.reduce((sum, p) => sum + p.user, 0);
   const totalAppScore = scores.reduce((sum, p) => sum + p.app, 0);
+  const totalUserShots = shots.reduce((sum, p) => sum + p.user, 0);
+  const totalAppShots = shots.reduce((sum, p) => sum + p.app, 0);
 
   const deckRef = useRef(deck);
   const drawnCardRef = useRef(drawnCard);
@@ -122,6 +135,8 @@ export const CardHockey: React.FC<{
   const userTeamRef = useRef(userTeam);
   const currentTurnRef = useRef(currentTurn);
   const periodRef = useRef(period);
+  const scoresRef = useRef(scores);
+  const shotsRef = useRef(shots);
 
   useEffect(() => { deckRef.current = deck; }, [deck]);
   useEffect(() => { drawnCardRef.current = drawnCard; }, [drawnCard]);
@@ -129,6 +144,8 @@ export const CardHockey: React.FC<{
   useEffect(() => { userTeamRef.current = userTeam; }, [userTeam]);
   useEffect(() => { currentTurnRef.current = currentTurn; }, [currentTurn]);
   useEffect(() => { periodRef.current = period; }, [period]);
+  useEffect(() => { scoresRef.current = scores; }, [scores]);
+  useEffect(() => { shotsRef.current = shots; }, [shots]);
 
   const handleDeckEmpty = () => {
     if (periodRef.current < 3) {
@@ -136,8 +153,8 @@ export const CardHockey: React.FC<{
       setStatus('period_over');
       setMessage(`End of Period ${periodRef.current}`);
     } else {
-      const finalUserScore = scores.reduce((sum, p) => sum + p.user, 0);
-      const finalAppScore = scores.reduce((sum, p) => sum + p.app, 0);
+      const finalUserScore = scoresRef.current.reduce((sum, p) => sum + p.user, 0);
+      const finalAppScore = scoresRef.current.reduce((sum, p) => sum + p.app, 0);
       soundEngine.playGameOver(finalUserScore > finalAppScore);
       setStatus('gameover');
       setMessage('Game Over!');
@@ -164,8 +181,9 @@ export const CardHockey: React.FC<{
     
     setCurrentTurn(newStartingPlayer);
     setScores([{user: 0, app: 0}, {user: 0, app: 0}, {user: 0, app: 0}]);
+    setShots([{user: 0, app: 0}, {user: 0, app: 0}, {user: 0, app: 0}]);
     setPeriod(1);
-    setStatus('playing');
+    setStatus('ready_to_start');
     setMessage(`Game Starts! ${newStartingPlayer === 'user' ? 'Your Turn.' : "App's Turn."}`);
   };
 
@@ -272,6 +290,20 @@ export const CardHockey: React.FC<{
     setStatus('animating');
 
     if (position === 'g') {
+      if (targetTeam === 'app') {
+        setShots(prev => {
+          const newShots = [...prev];
+          newShots[periodRef.current - 1] = { ...newShots[periodRef.current - 1], user: newShots[periodRef.current - 1].user + 1 };
+          return newShots;
+        });
+      } else {
+        setShots(prev => {
+          const newShots = [...prev];
+          newShots[periodRef.current - 1] = { ...newShots[periodRef.current - 1], app: newShots[periodRef.current - 1].app + 1 };
+          return newShots;
+        });
+      }
+
       const goalie = team.g!;
       const revealedGoalie = { ...goalie, faceUp: true };
       
@@ -406,19 +438,33 @@ export const CardHockey: React.FC<{
           let chosenTarget: keyof Team | null = null;
           const val = drawnCard.value;
           
-          let shootThreshold = 9;
+          let shootThreshold = 10;
           const appScore = scores.reduce((acc, s) => acc + s.app, 0);
           const userScore = scores.reduce((acc, s) => acc + s.user, 0);
           const cardsLeft = deckRef.current.length;
           
-          if (cardsLeft <= 4) {
-            shootThreshold = 2; // Shoot with anything if deck is very low
-          } else if (appScore > userScore && cardsLeft <= 10) {
-            shootThreshold = 4; // Lower threshold if leading and near the end
-          } else if (appScore >= userScore && cardsLeft <= 15) {
+          if (cardsLeft > 35) {
+            shootThreshold = 10;
+          } else if (cardsLeft > 25) {
+            shootThreshold = 9;
+          } else if (cardsLeft > 15) {
+            shootThreshold = 8;
+          } else if (cardsLeft > 8) {
             shootThreshold = 6;
-          } else if (cardsLeft <= 8) {
-            shootThreshold = 5; // Take chances if time is running out
+          } else if (cardsLeft > 4) {
+            shootThreshold = 4;
+          } else {
+            shootThreshold = 2; // Shoot with anything if deck is very low
+          }
+
+          // Adjust based on score
+          if (appScore < userScore) {
+            // If trailing, take more chances as time runs out
+            if (cardsLeft <= 20) shootThreshold = Math.max(2, shootThreshold - 1);
+            if (cardsLeft <= 10) shootThreshold = Math.max(2, shootThreshold - 1);
+          } else if (appScore > userScore && cardsLeft <= 10) {
+            // If leading and near the end, we can shoot with lower cards just to waste time/cards
+            shootThreshold = Math.max(2, shootThreshold - 1);
           }
 
           if (targets.includes('g') && val >= shootThreshold) {
@@ -433,16 +479,43 @@ export const CardHockey: React.FC<{
                 const targetCard = userTeamRef.current[t];
                 if (!targetCard) continue;
                 
-                let score = targetCard.value;
+                let score = targetCard.value * 10;
                 
-                // Only prioritize opening additional lanes if one lane is already completely open
-                // (i.e. a forward and a defenseman are gone, or the center is gone)
-                const isLaneOpen = (!userTeamRef.current.lf && !userTeamRef.current.ld) || 
-                                   (!userTeamRef.current.rf && !userTeamRef.current.rd) || 
-                                   !userTeamRef.current.c;
-
-                if (isLaneOpen && (t === 'c' || t === 'ld' || t === 'rd')) {
-                  score += 100;
+                const currentState = userTeamRef.current;
+                const nextState = { ...currentState, [t]: null };
+                
+                const currentProgress = (!currentState.c ? 1 : 0) + 
+                                        ((!currentState.lf || !currentState.rf) ? 1 : 0) + 
+                                        ((!currentState.ld || !currentState.rd) ? 1 : 0);
+                const nextProgress = (!nextState.c ? 1 : 0) + 
+                                     ((!nextState.lf || !nextState.rf) ? 1 : 0) + 
+                                     ((!nextState.ld || !nextState.rd) ? 1 : 0);
+                
+                if (nextProgress === 3) {
+                  score += 10000;
+                } else if (nextProgress > currentProgress) {
+                  score += 5000;
+                }
+                
+                const currentExposedD = (!currentState.lf && currentState.ld ? 1 : 0) + 
+                                        (!currentState.rf && currentState.rd ? 1 : 0);
+                const nextExposedD = (!nextState.lf && nextState.ld ? 1 : 0) + 
+                                     (!nextState.rf && nextState.rd ? 1 : 0);
+                
+                if (nextExposedD > currentExposedD) {
+                  score += 1000;
+                  
+                  if (t === 'lf' && currentState.ld) {
+                    score += (15 - currentState.ld.value) * 200;
+                  } else if (t === 'rf' && currentState.rd) {
+                    score += (15 - currentState.rd.value) * 200;
+                  }
+                } else {
+                  if (t === 'ld' || t === 'rd') {
+                    score += 3000;
+                  } else if (t === 'c') {
+                    score += 1500;
+                  }
                 }
                 
                 if (score > bestScore) {
@@ -453,7 +526,8 @@ export const CardHockey: React.FC<{
               chosenTarget = bestTarget;
             } else if (targets.includes('g')) {
               // If 'g' is the ONLY target, but we didn't meet the shootThreshold
-              if (val >= 5 || cardsLeft <= 6) {
+              // We should still consider shooting if the card is decent or deck is low
+              if (val >= Math.max(4, shootThreshold - 2) || cardsLeft <= 6) {
                 chosenTarget = 'g';
               }
             }
@@ -523,7 +597,55 @@ export const CardHockey: React.FC<{
                   className="fixed inset-0 z-30" 
                   onClick={() => setShowMenu(false)}
                 />
-                <div className="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-40 overflow-hidden">
+                <div className="absolute right-0 top-full mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-40 overflow-hidden">
+                  {onSaveTournament && (
+                    <button 
+                      onClick={() => { 
+                        soundEngine.playClick(); 
+                        setShowMenu(false);
+                        onSaveTournament(); 
+                      }} 
+                      className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors border-b border-slate-700"
+                    >
+                      Save Tournament
+                    </button>
+                  )}
+                  {onRestoreTournament && (
+                    <button 
+                      onClick={() => { 
+                        soundEngine.playClick(); 
+                        setShowMenu(false);
+                        onRestoreTournament(); 
+                      }} 
+                      className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors border-b border-slate-700"
+                    >
+                      Restore Tournament
+                    </button>
+                  )}
+                  {onExportBackup && (
+                    <button 
+                      onClick={() => { 
+                        soundEngine.playClick(); 
+                        setShowMenu(false);
+                        onExportBackup(); 
+                      }} 
+                      className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors border-b border-slate-700"
+                    >
+                      Export Backup
+                    </button>
+                  )}
+                  {onImportBackup && (
+                    <button 
+                      onClick={() => { 
+                        soundEngine.playClick(); 
+                        setShowMenu(false);
+                        onImportBackup(); 
+                      }} 
+                      className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors border-b border-slate-700"
+                    >
+                      Import Backup
+                    </button>
+                  )}
                   <button 
                     onClick={() => { 
                       soundEngine.playClick(); 
@@ -541,19 +663,21 @@ export const CardHockey: React.FC<{
         )}
       </div>
 
-      <div className="flex-1 w-full max-w-6xl flex items-center justify-center relative z-10 mt-12">
-        <div className="flex flex-col lg:flex-row justify-center items-start gap-6 lg:gap-16 w-full">
+      <div className="flex-1 w-full max-w-[1400px] flex items-center justify-center relative z-10 mt-12">
+        <div className="flex flex-col lg:flex-row justify-center items-start gap-0 lg:gap-0 w-full">
           
           {/* Left: Scoreboard */}
-          <div className="flex flex-col gap-4 items-center bg-slate-900/80 px-6 py-6 rounded-3xl border border-slate-800 shadow-xl order-1 lg:order-none min-w-[160px] max-w-[250px] w-full">
-            <div className="flex items-center gap-4">
-              <div className="text-center w-[60px]">
-                <div className="text-[10px] md:text-xs text-slate-400 font-bold tracking-wider mb-1 truncate">{homeTeamName || 'YOU'}</div>
+          <div className="flex flex-col gap-4 items-center bg-slate-900/80 px-6 py-6 rounded-3xl border border-slate-800 shadow-xl order-1 lg:order-none min-w-[200px] max-w-[320px] w-full">
+            <div className="flex items-center gap-3 w-full justify-between">
+              <div className="text-center flex-1 min-w-0">
+                {isTournament && <div className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-0.5">(You)</div>}
+                <div className="text-[10px] md:text-xs text-slate-400 font-bold tracking-wider mb-1 truncate px-1">{homeTeamName || 'YOU'}</div>
                 <div className="text-3xl md:text-4xl font-black text-emerald-400">{totalUserScore}</div>
               </div>
-              <div className="text-slate-600 font-black text-2xl">-</div>
-              <div className="text-center w-[60px]">
-                <div className="text-[10px] md:text-xs text-slate-400 font-bold tracking-wider mb-1 truncate">{awayTeamName || 'APP'}</div>
+              <div className="text-slate-600 font-black text-2xl shrink-0">-</div>
+              <div className="text-center flex-1 min-w-0">
+                {isTournament && <div className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-0.5">(App)</div>}
+                <div className="text-[10px] md:text-xs text-slate-400 font-bold tracking-wider mb-1 truncate px-1">{awayTeamName || 'APP'}</div>
                 <div className="text-3xl md:text-4xl font-black text-cyan-400">{totalAppScore}</div>
               </div>
             </div>
@@ -589,7 +713,19 @@ export const CardHockey: React.FC<{
             </div>
 
             <div className={`text-lg font-bold text-white my-4 min-h-[4rem] flex items-center justify-center text-center ${isGoalScored ? 'animate-shake goal-text' : ''}`}>
-              {message}
+              {status === 'ready_to_start' ? (
+                <button 
+                  onClick={() => {
+                    soundEngine.playClick();
+                    setStatus('playing');
+                  }}
+                  className="px-8 py-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl font-black text-xl transition-colors shadow-[0_0_15px_rgba(16,185,129,0.5)] hover:shadow-[0_0_25px_rgba(16,185,129,0.7)] animate-pulse"
+                >
+                  START MATCH
+                </button>
+              ) : (
+                message
+              )}
             </div>
 
             {/* User Team */}
@@ -608,9 +744,9 @@ export const CardHockey: React.FC<{
           </div>
 
           {/* Right: Deck and Drawn Card */}
-          <div className="flex flex-col justify-start items-center gap-6 md:gap-12 order-3 lg:order-none my-4 lg:my-0">
+          <div className="flex flex-col justify-start items-center gap-6 md:gap-12 order-3 lg:order-none min-w-[200px] max-w-[320px] w-full my-4 lg:my-0">
             {tournamentTable && (
-              <div className="bg-slate-900/80 px-4 py-4 rounded-3xl border border-slate-800 shadow-xl w-full max-w-[300px]">
+              <div className="bg-slate-900/80 px-4 py-4 rounded-3xl border border-slate-800 shadow-xl w-full">
                 {tournamentTable}
               </div>
             )}
@@ -664,10 +800,37 @@ export const CardHockey: React.FC<{
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-700 rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center">
             <h2 className="text-3xl font-black text-white mb-4">Game Over!</h2>
-            <div className="text-xl text-slate-300 mb-8">
+            <div className="text-xl text-slate-300 mb-6">
               Final Score: <br/>
               <span className="text-emerald-400 font-bold">{homeTeamName || 'You'}: {totalUserScore}</span> - <span className="text-cyan-400 font-bold">{awayTeamName || 'App'}: {totalAppScore}</span>
             </div>
+
+            <div className="bg-slate-800 rounded-xl p-4 mb-8 text-sm text-left shadow-inner">
+              <h3 className="text-white font-bold mb-3 border-b border-slate-700 pb-2 text-center">Match Statistics</h3>
+              
+              <div className="flex justify-between text-slate-300 mb-4 font-medium">
+                <span>Total Shots</span>
+                <div className="flex gap-4 font-mono">
+                  <span className="text-emerald-400 w-6 text-right">{totalUserShots}</span>
+                  <span className="text-slate-500">-</span>
+                  <span className="text-cyan-400 w-6 text-left">{totalAppShots}</span>
+                </div>
+              </div>
+              
+              <div className="mb-2 text-xs text-slate-500 uppercase tracking-wider font-bold">Goals by Period</div>
+              
+              {[1, 2, 3].map((p) => (
+                <div key={p} className="flex justify-between text-slate-400 mb-1">
+                  <span>Period {p}</span>
+                  <div className="flex gap-4 font-mono">
+                    <span className="text-emerald-400 w-6 text-right">{scores[p-1].user}</span>
+                    <span className="text-slate-600">-</span>
+                    <span className="text-cyan-400 w-6 text-left">{scores[p-1].app}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
             <button 
               onClick={() => { 
                 soundEngine.playClick(); 

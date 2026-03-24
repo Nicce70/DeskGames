@@ -22,6 +22,19 @@ type Match = {
   played: boolean;
 };
 
+type SavedTournament = {
+  id: string;
+  name: string;
+  date: string;
+  state: {
+    teams: string[];
+    matches: Match[];
+    currentMatchIndex: number;
+    isSetup: boolean;
+    seasonOver: boolean;
+  };
+};
+
 // Round Robin Generator for 8 teams
 const generateSchedule = (teams: string[]): Match[] => {
   const matches: Match[] = [];
@@ -56,11 +69,17 @@ const generateSchedule = (teams: string[]): Match[] => {
 
 export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [teams, setTeams] = useState<string[]>([]);
+  const [tournamentName, setTournamentName] = useState<string>('');
   const [matches, setMatches] = useState<Match[]>([]);
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [isSetup, setIsSetup] = useState(true);
   const [seasonOver, setSeasonOver] = useState(false);
   const [showRestartConfirm, setShowRestartConfirm] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [saveName, setSaveName] = useState('');
+  const [savedTournaments, setSavedTournaments] = useState<SavedTournament[]>([]);
+  const [tournamentToRestore, setTournamentToRestore] = useState<SavedTournament | null>(null);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -70,6 +89,7 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
         const parsed = JSON.parse(savedState);
         if (parsed && parsed.teams && parsed.matches) {
           setTeams(parsed.teams);
+          setTournamentName(parsed.tournamentName || 'My Tournament');
           setMatches(parsed.matches);
           setCurrentMatchIndex(parsed.currentMatchIndex || 0);
           setIsSetup(parsed.isSetup === undefined ? true : parsed.isSetup);
@@ -86,6 +106,7 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
     if (teams.length > 0) {
       const stateToSave = {
         teams,
+        tournamentName,
         matches,
         currentMatchIndex,
         isSetup,
@@ -93,10 +114,11 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
       };
       localStorage.setItem('cardHockeyTournamentState', JSON.stringify(stateToSave));
     }
-  }, [teams, matches, currentMatchIndex, isSetup, seasonOver]);
+  }, [teams, tournamentName, matches, currentMatchIndex, isSetup, seasonOver]);
 
-  const handleStart = (teamNames: string[]) => {
+  const handleStart = (teamNames: string[], name: string) => {
     setTeams(teamNames);
+    setTournamentName(name);
     setMatches(generateSchedule(teamNames));
     setIsSetup(false);
     setSeasonOver(false);
@@ -106,11 +128,97 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
   const handleRestartSeason = () => {
     localStorage.removeItem('cardHockeyTournamentState');
     setTeams([]);
+    setTournamentName('');
     setMatches([]);
     setCurrentMatchIndex(0);
     setIsSetup(true);
     setSeasonOver(false);
     setShowRestartConfirm(false);
+  };
+
+  const handleSaveTournament = () => {
+    if (!saveName.trim()) return;
+    
+    const savedList = localStorage.getItem('cardHockeySavedTournaments');
+    let parsedList: SavedTournament[] = savedList ? JSON.parse(savedList) : [];
+    
+    const newName = saveName.trim();
+    
+    // Check if we are renaming
+    if (newName !== tournamentName) {
+      if (!window.confirm(`Vill du byta namn på turneringen till "${newName}" och spara?`)) {
+        return;
+      }
+      setTournamentName(newName);
+    } else {
+      // Check if it already exists to overwrite
+      const existingIndex = parsedList.findIndex(t => t.name === newName);
+      if (existingIndex !== -1) {
+        if (!window.confirm(`Vill du spara över befintlig turnering "${newName}"?`)) {
+          return;
+        }
+        // Remove the old one so we can push the new one
+        parsedList = parsedList.filter(t => t.name !== newName);
+      }
+    }
+    
+    const newSave: SavedTournament = {
+      id: Date.now().toString(),
+      name: newName,
+      date: new Date().toLocaleString(),
+      state: {
+        teams,
+        tournamentName: newName,
+        matches,
+        currentMatchIndex,
+        isSetup,
+        seasonOver
+      }
+    };
+    
+    localStorage.setItem('cardHockeySavedTournaments', JSON.stringify([...parsedList, newSave]));
+    setShowSaveModal(false);
+    setSaveName('');
+  };
+
+  const handleOpenSaveModal = () => {
+    setSaveName(tournamentName || `Tournament ${new Date().toLocaleDateString()}`);
+    setShowSaveModal(true);
+  };
+
+  const handleOpenRestoreModal = () => {
+    const savedList = localStorage.getItem('cardHockeySavedTournaments');
+    if (savedList) {
+      setSavedTournaments(JSON.parse(savedList));
+    } else {
+      setSavedTournaments([]);
+    }
+    setShowRestoreModal(true);
+  };
+
+  const handleRestoreTournament = (saved: SavedTournament) => {
+    setTournamentToRestore(saved);
+  };
+
+  const confirmRestore = () => {
+    if (!tournamentToRestore) return;
+    
+    const { state } = tournamentToRestore;
+    setTeams(state.teams);
+    setMatches(state.matches);
+    setCurrentMatchIndex(state.currentMatchIndex);
+    setIsSetup(state.isSetup);
+    setSeasonOver(state.seasonOver);
+    
+    setTournamentToRestore(null);
+    setShowRestoreModal(false);
+  };
+
+  const handleDeleteBackup = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updatedList = savedTournaments.filter(t => t.id !== id);
+    setSavedTournaments(updatedList);
+    localStorage.setItem('cardHockeySavedTournaments', JSON.stringify(updatedList));
   };
 
   const handleMatchComplete = (homeScore: number, awayScore: number) => {
@@ -131,6 +239,62 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
       setCurrentMatchIndex(prev => prev + 1);
     } else {
       setSeasonOver(true);
+    }
+  };
+
+  const handleExportBackup = () => {
+    const backupData = {
+      cardHockeyTournamentState: localStorage.getItem('cardHockeyTournamentState'),
+      cardHockeySavedTournaments: localStorage.getItem('cardHockeySavedTournaments')
+    };
+    
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cardhockey-backup-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const parsed = JSON.parse(content);
+        
+        if (parsed.cardHockeyTournamentState) {
+          localStorage.setItem('cardHockeyTournamentState', parsed.cardHockeyTournamentState);
+          const state = JSON.parse(parsed.cardHockeyTournamentState);
+          setTeams(state.teams || []);
+          setMatches(state.matches || []);
+          setCurrentMatchIndex(state.currentMatchIndex || 0);
+          setIsSetup(state.isSetup === undefined ? true : state.isSetup);
+          setSeasonOver(state.seasonOver || false);
+        }
+        
+        if (parsed.cardHockeySavedTournaments) {
+          localStorage.setItem('cardHockeySavedTournaments', parsed.cardHockeySavedTournaments);
+          setSavedTournaments(JSON.parse(parsed.cardHockeySavedTournaments));
+        }
+        
+        alert('Backup imported successfully!');
+      } catch (error) {
+        console.error('Failed to import backup:', error);
+        alert('Invalid backup file.');
+      }
+    };
+    reader.readAsText(file);
+    
+    // Reset file input
+    if (e.target) {
+      e.target.value = '';
     }
   };
 
@@ -264,7 +428,7 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
           {table.map((t, i) => (
             <tr key={t.name} className="border-b border-slate-800/50 last:border-0">
               <td className="px-2 py-2 font-bold text-slate-500">{i + 1}</td>
-              <td className={`px-2 py-2 font-bold truncate max-w-[80px] ${t.name === currentMatch.homeTeam ? 'text-emerald-400' : t.name === currentMatch.awayTeam ? 'text-cyan-400' : 'text-white'}`}>
+              <td className={`px-2 py-2 font-bold truncate max-w-[120px] ${t.name === currentMatch.homeTeam ? 'text-emerald-400' : t.name === currentMatch.awayTeam ? 'text-cyan-400' : 'text-white'}`}>
                 {t.name}
               </td>
               <td className="px-1 py-2 text-center text-slate-400">{t.gp}</td>
@@ -280,7 +444,12 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
 
   const tournamentSchedule = (
     <div className="w-full mt-6">
-      <h3 className="text-cyan-400 font-black uppercase tracking-widest mb-4 text-center">Schedule</h3>
+      <h3 className="text-cyan-400 font-black uppercase tracking-widest mb-1 text-center">Schedule</h3>
+      {tournamentName && (
+        <div className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4 text-center">
+          {tournamentName}
+        </div>
+      )}
       <div className="max-h-[300px] overflow-y-auto pr-2 custom-scrollbar" id="schedule-container">
         {Array.from({ length: 7 }).map((_, roundIndex) => {
           const roundMatches = matches.filter(m => m.round === roundIndex + 1);
@@ -336,6 +505,10 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
         tournamentSchedule={tournamentSchedule}
         nextMatchLabel={currentMatchIndex + 1 < matches.length ? 'NEXT MATCH' : 'VIEW STANDINGS'}
         onRestartSeason={() => setShowRestartConfirm(true)}
+        onSaveTournament={handleOpenSaveModal}
+        onRestoreTournament={handleOpenRestoreModal}
+        onExportBackup={handleExportBackup}
+        onImportBackup={() => document.getElementById('import-backup-input')?.click()}
       />
 
       {showRestartConfirm && (
@@ -362,6 +535,121 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
           </div>
         </div>
       )}
+
+      {showSaveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <h2 className="text-2xl font-black text-white mb-4 text-center">Save Tournament</h2>
+            <p className="text-slate-300 mb-4 text-center text-sm">
+              Enter a name for your backup. You can restore it later from the menu.
+            </p>
+            <input 
+              type="text" 
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white mb-6 focus:outline-none focus:border-blue-500"
+              placeholder="Tournament Name"
+              autoFocus
+            />
+            <div className="flex gap-4 justify-center">
+              <button 
+                onClick={() => setShowSaveModal(false)}
+                className="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-700 transition-colors flex-1"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSaveTournament}
+                disabled={!saveName.trim()}
+                className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-500 transition-colors flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRestoreModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl max-h-[80vh] flex flex-col">
+            <h2 className="text-2xl font-black text-white mb-4 text-center">Restore Tournament</h2>
+            
+            {!tournamentToRestore ? (
+              <>
+                <p className="text-slate-300 mb-4 text-center text-sm">
+                  Select a backup to restore. <strong className="text-red-400">Warning:</strong> Your current tournament progress will be overwritten.
+                </p>
+                
+                <div className="flex-1 overflow-y-auto mb-6 space-y-2 pr-2">
+                  {savedTournaments.length === 0 ? (
+                    <div className="text-center text-slate-500 py-8 italic">No saved tournaments found.</div>
+                  ) : (
+                    savedTournaments.map(saved => (
+                      <div 
+                        key={saved.id}
+                        onClick={() => handleRestoreTournament(saved)}
+                        className="bg-slate-800 border border-slate-700 rounded-xl p-4 cursor-pointer hover:bg-slate-700 hover:border-blue-500 transition-all flex justify-between items-center group"
+                      >
+                        <div>
+                          <div className="font-bold text-white">{saved.name}</div>
+                          <div className="text-xs text-slate-400 mt-1">{saved.date} • {saved.state.seasonOver ? 'Completed' : `Match ${saved.state.currentMatchIndex + 1}`}</div>
+                        </div>
+                        <button 
+                          onClick={(e) => handleDeleteBackup(saved.id, e)}
+                          className="text-slate-500 hover:text-red-400 p-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Delete backup"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+                
+                <div className="flex justify-center mt-auto">
+                  <button 
+                    onClick={() => setShowRestoreModal(false)}
+                    className="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-700 transition-colors w-full"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="text-center">
+                <p className="text-slate-300 mb-6">
+                  Are you sure you want to restore <strong>"{tournamentToRestore.name}"</strong>?
+                  <br /><br />
+                  <span className="text-red-400 font-bold">Your current tournament progress will be overwritten! Make sure to save it first if you want to keep it.</span>
+                </p>
+                <div className="flex gap-4 justify-center">
+                  <button 
+                    onClick={() => setTournamentToRestore(null)}
+                    className="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-700 transition-colors flex-1"
+                  >
+                    Back
+                  </button>
+                  <button 
+                    onClick={confirmRestore}
+                    className="px-6 py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-400 transition-colors flex-1"
+                  >
+                    Yes, Restore
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <input 
+        type="file" 
+        id="import-backup-input" 
+        accept=".json" 
+        style={{ display: 'none' }} 
+        onChange={handleImportBackup} 
+      />
     </>
   );
 };

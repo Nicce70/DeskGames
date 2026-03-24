@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import { soundEngine } from './utils/sound';
 
 interface TournamentSetupProps {
-  onStart: (teams: string[]) => void;
+  onStart: (teams: string[], name: string) => void;
   onBack: () => void;
 }
 
 export const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart, onBack }) => {
+  const [tournamentName, setTournamentName] = useState<string>('My Tournament');
   const [teams, setTeams] = useState<string[]>([
     'Sweden', 'Canada', 'USA', 'Finland', 
     'Czechia', 'Germany', 'Slovakia', 'Switzerland'
@@ -24,6 +25,18 @@ export const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart, onBac
         Tournament Setup
       </h1>
       <div className="bg-slate-900/80 p-8 rounded-3xl border border-slate-800 shadow-xl w-full max-w-md">
+        <div className="mb-8">
+          <h2 className="text-xl font-bold mb-4 text-center text-slate-300">Tournament Name</h2>
+          <input 
+            type="text" 
+            value={tournamentName}
+            onChange={(e) => setTournamentName(e.target.value)}
+            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white text-center font-bold focus:outline-none focus:border-emerald-500 transition-colors"
+            placeholder="Enter tournament name"
+            maxLength={30}
+          />
+        </div>
+        
         <h2 className="text-xl font-bold mb-6 text-center text-slate-300">Enter 8 Teams</h2>
         <div className="flex flex-col gap-4 mb-8">
           {teams.map((team, i) => (
@@ -48,12 +61,12 @@ export const TournamentSetup: React.FC<TournamentSetupProps> = ({ onStart, onBac
           </button>
           <button 
             onClick={() => { 
-              if (teams.every(t => t.trim().length > 0)) {
+              if (teams.every(t => t.trim().length > 0) && tournamentName.trim().length > 0) {
                 soundEngine.playClick(); 
-                onStart(teams.map(t => t.trim())); 
+                onStart(teams.map(t => t.trim()), tournamentName.trim()); 
               }
             }}
-            disabled={!teams.every(t => t.trim().length > 0)}
+            disabled={!teams.every(t => t.trim().length > 0) || !tournamentName.trim()}
             className="flex-1 py-3 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-400 transition-colors disabled:opacity-50"
           >
             Start Season
