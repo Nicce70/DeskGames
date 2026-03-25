@@ -438,34 +438,54 @@ export const CardHockey: React.FC<{
           let chosenTarget: keyof Team | null = null;
           const val = drawnCard.value;
           
-          let shootThreshold = 10;
+          let shootThreshold = 11;
           const appScore = scores.reduce((acc, s) => acc + s.app, 0);
           const userScore = scores.reduce((acc, s) => acc + s.user, 0);
           const cardsLeft = deckRef.current.length;
           
-          if (cardsLeft > 35) {
-            shootThreshold = 10;
-          } else if (cardsLeft > 25) {
+          // Calculate app's defensive strength
+          const appG = appTeamRef.current.g?.value || 0;
+          const appLD = appTeamRef.current.ld?.value || 0;
+          const appRD = appTeamRef.current.rd?.value || 0;
+          const defenseStrength = appG + ((appLD + appRD) / 2);
+          
+          if (cardsLeft > 30) {
+            shootThreshold = 12;
+          } else if (cardsLeft > 20) {
+            shootThreshold = 11;
+          } else if (cardsLeft > 12) {
             shootThreshold = 9;
-          } else if (cardsLeft > 15) {
-            shootThreshold = 8;
-          } else if (cardsLeft > 8) {
-            shootThreshold = 6;
-          } else if (cardsLeft > 4) {
-            shootThreshold = 4;
+          } else if (cardsLeft > 6) {
+            shootThreshold = 7;
+          } else if (cardsLeft > 3) {
+            shootThreshold = 5;
           } else {
             shootThreshold = 2; // Shoot with anything if deck is very low
+          }
+
+          // If app has strong defense and plenty of cards, it can afford to wait for a better shot
+          if (defenseStrength >= 20 && cardsLeft > 10) {
+            shootThreshold += 1;
+          }
+          if (defenseStrength >= 24 && cardsLeft > 15) {
+            shootThreshold += 1;
           }
 
           // Adjust based on score
           if (appScore < userScore) {
             // If trailing, take more chances as time runs out
             if (cardsLeft <= 20) shootThreshold = Math.max(2, shootThreshold - 1);
-            if (cardsLeft <= 10) shootThreshold = Math.max(2, shootThreshold - 1);
-          } else if (appScore > userScore && cardsLeft <= 10) {
-            // If leading and near the end, we can shoot with lower cards just to waste time/cards
-            shootThreshold = Math.max(2, shootThreshold - 1);
+            if (cardsLeft <= 10) shootThreshold = Math.max(2, shootThreshold - 2);
+          } else if (appScore > userScore) {
+            // If leading, play a bit safer unless near the end
+            if (cardsLeft > 10) {
+              shootThreshold = Math.min(14, shootThreshold + 1);
+            } else {
+              shootThreshold = Math.max(2, shootThreshold - 1);
+            }
           }
+          
+          shootThreshold = Math.min(14, shootThreshold);
 
           if (targets.includes('g') && val >= shootThreshold) {
             chosenTarget = 'g';
@@ -514,7 +534,7 @@ export const CardHockey: React.FC<{
             } else if (targets.includes('g')) {
               // If 'g' is the ONLY target, but we didn't meet the shootThreshold
               // We should still consider shooting if the card is decent or deck is low
-              if (val >= Math.max(4, shootThreshold - 2) || cardsLeft <= 6) {
+              if (val >= Math.max(6, shootThreshold - 2) || cardsLeft <= 5) {
                 chosenTarget = 'g';
               }
             }
