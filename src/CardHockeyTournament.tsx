@@ -6,6 +6,9 @@ import { TournamentSetup } from './TournamentSetup';
 type TeamStats = {
   name: string;
   gp: number;
+  w: number;
+  d: number;
+  l: number;
   gf: number;
   ga: number;
   gd: number;
@@ -78,8 +81,11 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [saveName, setSaveName] = useState('');
+  const [saveConfirmMessage, setSaveConfirmMessage] = useState<string | null>(null);
+  const [pendingSaveName, setPendingSaveName] = useState<string | null>(null);
   const [savedTournaments, setSavedTournaments] = useState<SavedTournament[]>([]);
   const [tournamentToRestore, setTournamentToRestore] = useState<SavedTournament | null>(null);
+  const [tournamentToDelete, setTournamentToDelete] = useState<SavedTournament | null>(null);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -140,27 +146,35 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
     if (!saveName.trim()) return;
     
     const savedList = localStorage.getItem('cardHockeySavedTournaments');
-    let parsedList: SavedTournament[] = savedList ? JSON.parse(savedList) : [];
+    const parsedList: SavedTournament[] = savedList ? JSON.parse(savedList) : [];
     
     const newName = saveName.trim();
     
     // Check if we are renaming
     if (newName !== tournamentName) {
-      if (!window.confirm(`Vill du byta namn på turneringen till "${newName}" och spara?`)) {
-        return;
-      }
-      setTournamentName(newName);
+      setSaveConfirmMessage(`Do you want to rename the tournament to "${newName}" and save?`);
+      setPendingSaveName(newName);
+      return;
     } else {
       // Check if it already exists to overwrite
       const existingIndex = parsedList.findIndex(t => t.name === newName);
       if (existingIndex !== -1) {
-        if (!window.confirm(`Vill du spara över befintlig turnering "${newName}"?`)) {
-          return;
-        }
-        // Remove the old one so we can push the new one
-        parsedList = parsedList.filter(t => t.name !== newName);
+        setSaveConfirmMessage(`Do you want to overwrite the existing tournament "${newName}"?`);
+        setPendingSaveName(newName);
+        return;
       }
     }
+    
+    executeSave(newName, parsedList);
+  };
+
+  const executeSave = (newName: string, parsedList: SavedTournament[]) => {
+    if (newName !== tournamentName) {
+      setTournamentName(newName);
+    }
+    
+    // Remove the old one so we can push the new one
+    const filteredList = parsedList.filter(t => t.name !== newName);
     
     const newSave: SavedTournament = {
       id: Date.now().toString(),
@@ -176,13 +190,30 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
       }
     };
     
-    localStorage.setItem('cardHockeySavedTournaments', JSON.stringify([...parsedList, newSave]));
+    localStorage.setItem('cardHockeySavedTournaments', JSON.stringify([...filteredList, newSave]));
     setShowSaveModal(false);
     setSaveName('');
+    setSaveConfirmMessage(null);
+    setPendingSaveName(null);
+  };
+
+  const confirmSave = () => {
+    if (pendingSaveName) {
+      const savedList = localStorage.getItem('cardHockeySavedTournaments');
+      const parsedList: SavedTournament[] = savedList ? JSON.parse(savedList) : [];
+      executeSave(pendingSaveName, parsedList);
+    }
+  };
+
+  const cancelSaveConfirm = () => {
+    setSaveConfirmMessage(null);
+    setPendingSaveName(null);
   };
 
   const handleOpenSaveModal = () => {
     setSaveName(tournamentName || `Tournament ${new Date().toLocaleDateString()}`);
+    setSaveConfirmMessage(null);
+    setPendingSaveName(null);
     setShowSaveModal(true);
   };
 
@@ -214,11 +245,21 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
     setShowRestoreModal(false);
   };
 
-  const handleDeleteBackup = (id: string, e: React.MouseEvent) => {
+  const handleDeleteBackup = (saved: SavedTournament, e: React.MouseEvent) => {
     e.stopPropagation();
-    const updatedList = savedTournaments.filter(t => t.id !== id);
+    setTournamentToDelete(saved);
+  };
+
+  const confirmDeleteBackup = () => {
+    if (!tournamentToDelete) return;
+    const updatedList = savedTournaments.filter(t => t.id !== tournamentToDelete.id);
     setSavedTournaments(updatedList);
     localStorage.setItem('cardHockeySavedTournaments', JSON.stringify(updatedList));
+    setTournamentToDelete(null);
+  };
+
+  const cancelDeleteBackup = () => {
+    setTournamentToDelete(null);
   };
 
   const handleMatchComplete = (homeScore: number, awayScore: number) => {
@@ -299,7 +340,7 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
   };
 
   // Calculate table
-  const table: TeamStats[] = teams.map(name => ({ name, gp: 0, gf: 0, ga: 0, gd: 0, pts: 0 }));
+  const table: TeamStats[] = teams.map(name => ({ name, gp: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 }));
   matches.filter(m => m.played).forEach(m => {
     const home = table.find(t => t.name === m.homeTeam)!;
     const away = table.find(t => t.name === m.awayTeam)!;
@@ -314,10 +355,16 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
     away.gd = away.gf - away.ga;
 
     if (m.homeScore! > m.awayScore!) {
+      home.w += 1;
+      away.l += 1;
       home.pts += 3;
     } else if (m.homeScore! < m.awayScore!) {
+      away.w += 1;
+      home.l += 1;
       away.pts += 3;
     } else {
+      home.d += 1;
+      away.d += 1;
       home.pts += 1;
       away.pts += 1;
     }
@@ -363,13 +410,16 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
           Champion: {champion.name} 🏆
         </h2>
         
-        <div className="bg-slate-900/80 rounded-2xl border border-slate-800 p-6 max-w-2xl w-full mb-8">
-          <table className="w-full text-sm text-left text-slate-300">
+        <div className="bg-slate-900/80 rounded-2xl border border-slate-800 p-6 max-w-4xl w-full mb-8 overflow-x-auto">
+          <table className="w-full text-sm text-left text-slate-300 min-w-[600px]">
             <thead className="text-xs text-slate-500 uppercase bg-slate-900/50">
               <tr>
                 <th className="px-4 py-3">#</th>
                 <th className="px-4 py-3">Team</th>
                 <th className="px-4 py-3 text-center">GP</th>
+                <th className="px-4 py-3 text-center">W</th>
+                <th className="px-4 py-3 text-center">D</th>
+                <th className="px-4 py-3 text-center">L</th>
                 <th className="px-4 py-3 text-center">GF - GA</th>
                 <th className="px-4 py-3 text-center">GD</th>
                 <th className="px-4 py-3 text-center font-bold text-white">PTS</th>
@@ -381,6 +431,9 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
                   <td className="px-4 py-3 font-bold">{i + 1}</td>
                   <td className={`px-4 py-3 font-bold ${i === 0 ? 'text-yellow-400' : 'text-white'}`}>{t.name}</td>
                   <td className="px-4 py-3 text-center">{t.gp}</td>
+                  <td className="px-4 py-3 text-center">{t.w}</td>
+                  <td className="px-4 py-3 text-center">{t.d}</td>
+                  <td className="px-4 py-3 text-center">{t.l}</td>
                   <td className="px-4 py-3 text-center whitespace-nowrap">{t.gf} - {t.ga}</td>
                   <td className="px-4 py-3 text-center">{t.gd > 0 ? `+${t.gd}` : t.gd}</td>
                   <td className="px-4 py-3 text-center font-bold text-emerald-400">{t.pts}</td>
@@ -419,6 +472,9 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
             <th className="px-2 py-2">#</th>
             <th className="px-2 py-2">Team</th>
             <th className="px-1 py-2 text-center" title="Games Played">GP</th>
+            <th className="px-1 py-2 text-center" title="Wins">W</th>
+            <th className="px-1 py-2 text-center" title="Draws">D</th>
+            <th className="px-1 py-2 text-center" title="Losses">L</th>
             <th className="px-1 py-2 text-center" title="Goals For - Goals Against">GF - GA</th>
             <th className="px-1 py-2 text-center" title="Goal Difference">GD</th>
             <th className="px-2 py-2 text-center font-bold text-white">PTS</th>
@@ -432,6 +488,9 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
                 {t.name}
               </td>
               <td className="px-1 py-2 text-center text-slate-400">{t.gp}</td>
+              <td className="px-1 py-2 text-center text-slate-400">{t.w}</td>
+              <td className="px-1 py-2 text-center text-slate-400">{t.d}</td>
+              <td className="px-1 py-2 text-center text-slate-400">{t.l}</td>
               <td className="px-1 py-2 text-center text-slate-400 whitespace-nowrap">{t.gf} - {t.ga}</td>
               <td className="px-1 py-2 text-center text-slate-400">{t.gd > 0 ? `+${t.gd}` : t.gd}</td>
               <td className="px-2 py-2 text-center font-bold text-emerald-400">{t.pts}</td>
@@ -539,33 +598,62 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
       {showSaveModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl">
-            <h2 className="text-2xl font-black text-white mb-4 text-center">Save Tournament</h2>
-            <p className="text-slate-300 mb-4 text-center text-sm">
-              Enter a name for your backup. You can restore it later from the menu.
-            </p>
-            <input 
-              type="text" 
-              value={saveName}
-              onChange={(e) => setSaveName(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white mb-6 focus:outline-none focus:border-blue-500"
-              placeholder="Tournament Name"
-              autoFocus
-            />
-            <div className="flex gap-4 justify-center">
-              <button 
-                onClick={() => setShowSaveModal(false)}
-                className="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-700 transition-colors flex-1"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleSaveTournament}
-                disabled={!saveName.trim()}
-                className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-500 transition-colors flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Save
-              </button>
-            </div>
+            {saveConfirmMessage ? (
+              <>
+                <h2 className="text-2xl font-black text-white mb-4 text-center">Confirm Save</h2>
+                <p className="text-slate-300 mb-8 text-center">
+                  {saveConfirmMessage}
+                </p>
+                <div className="flex gap-4 justify-center">
+                  <button 
+                    onClick={cancelSaveConfirm}
+                    className="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-700 transition-colors flex-1"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={confirmSave}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-500 transition-colors flex-1"
+                  >
+                    Yes, Save
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="text-2xl font-black text-white mb-4 text-center">Save Tournament</h2>
+                <p className="text-slate-300 mb-4 text-center text-sm">
+                  Enter a name for your backup. You can restore it later from the menu.
+                </p>
+                <input 
+                  type="text" 
+                  value={saveName}
+                  onChange={(e) => setSaveName(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white mb-6 focus:outline-none focus:border-blue-500"
+                  placeholder="Tournament Name"
+                  autoFocus
+                />
+                <div className="flex gap-4 justify-center">
+                  <button 
+                    onClick={() => {
+                      setShowSaveModal(false);
+                      setSaveConfirmMessage(null);
+                      setPendingSaveName(null);
+                    }}
+                    className="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-700 transition-colors flex-1"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleSaveTournament}
+                    disabled={!saveName.trim()}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-500 transition-colors flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Save
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -575,7 +663,29 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
           <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-md w-full shadow-2xl max-h-[80vh] flex flex-col">
             <h2 className="text-2xl font-black text-white mb-4 text-center">Restore Tournament</h2>
             
-            {!tournamentToRestore ? (
+            {tournamentToDelete ? (
+              <div className="text-center">
+                <p className="text-slate-300 mb-6">
+                  Are you sure you want to delete <strong>"{tournamentToDelete.name}"</strong>?
+                  <br /><br />
+                  <span className="text-red-400 font-bold">This action cannot be undone.</span>
+                </p>
+                <div className="flex gap-4 justify-center">
+                  <button 
+                    onClick={cancelDeleteBackup}
+                    className="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-700 transition-colors flex-1"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={confirmDeleteBackup}
+                    className="px-6 py-3 bg-red-600 text-white rounded-xl font-bold hover:bg-red-500 transition-colors flex-1"
+                  >
+                    Yes, Delete
+                  </button>
+                </div>
+              </div>
+            ) : !tournamentToRestore ? (
               <>
                 <p className="text-slate-300 mb-4 text-center text-sm">
                   Select a backup to restore. <strong className="text-red-400">Warning:</strong> Your current tournament progress will be overwritten.
@@ -596,7 +706,7 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
                           <div className="text-xs text-slate-400 mt-1">{saved.date} • {saved.state.seasonOver ? 'Completed' : `Match ${saved.state.currentMatchIndex + 1}`}</div>
                         </div>
                         <button 
-                          onClick={(e) => handleDeleteBackup(saved.id, e)}
+                          onClick={(e) => handleDeleteBackup(saved, e)}
                           className="text-slate-500 hover:text-red-400 p-2 opacity-0 group-hover:opacity-100 transition-opacity"
                           title="Delete backup"
                         >

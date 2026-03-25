@@ -479,7 +479,7 @@ export const CardHockey: React.FC<{
                 const targetCard = userTeamRef.current[t];
                 if (!targetCard) continue;
                 
-                let score = targetCard.value * 10;
+                let score = targetCard.value * 100; // Prioritize removing high-value cards
                 
                 const currentState = userTeamRef.current;
                 const nextState = { ...currentState, [t]: null };
@@ -492,30 +492,17 @@ export const CardHockey: React.FC<{
                                      ((!nextState.ld || !nextState.rd) ? 1 : 0);
                 
                 if (nextProgress === 3) {
-                  score += 10000;
+                  score += 100000; // Winning move (exposes goalie)
                 } else if (nextProgress > currentProgress) {
-                  score += 5000;
+                  score += 10000; // Progressing towards exposing goalie
                 }
                 
-                const currentExposedD = (!currentState.lf && currentState.ld ? 1 : 0) + 
-                                        (!currentState.rf && currentState.rd ? 1 : 0);
-                const nextExposedD = (!nextState.lf && nextState.ld ? 1 : 0) + 
-                                     (!nextState.rf && nextState.rd ? 1 : 0);
-                
-                if (nextExposedD > currentExposedD) {
-                  score += 1000;
-                  
-                  if (t === 'lf' && currentState.ld) {
-                    score += (15 - currentState.ld.value) * 200;
-                  } else if (t === 'rf' && currentState.rd) {
-                    score += (15 - currentState.rd.value) * 200;
-                  }
-                } else {
-                  if (t === 'ld' || t === 'rd') {
-                    score += 3000;
-                  } else if (t === 'c') {
-                    score += 1500;
-                  }
+                // If we are removing a forward, consider the strength of the defender behind them
+                // We want to expose WEAK defenders, so we give a bonus if the defender is weak
+                if (t === 'lf' && currentState.ld) {
+                  score += (15 - currentState.ld.value) * 50;
+                } else if (t === 'rf' && currentState.rd) {
+                  score += (15 - currentState.rd.value) * 50;
                 }
                 
                 if (score > bestScore) {
@@ -744,7 +731,7 @@ export const CardHockey: React.FC<{
           </div>
 
           {/* Right: Deck and Drawn Card */}
-          <div className="flex flex-col justify-start items-center gap-6 md:gap-12 order-3 lg:order-none min-w-[200px] max-w-[320px] w-full my-4 lg:my-0">
+          <div className="flex flex-col justify-start items-center gap-6 md:gap-12 order-3 lg:order-none min-w-[200px] max-w-[450px] w-full my-4 lg:my-0">
             {tournamentTable && (
               <div className="bg-slate-900/80 px-4 py-4 rounded-3xl border border-slate-800 shadow-xl w-full">
                 {tournamentTable}
