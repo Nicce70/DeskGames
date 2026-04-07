@@ -501,27 +501,27 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
   };
 
   const tournamentTable = (
-    <div className="w-full text-base">
-      <h3 className="text-emerald-400 font-black uppercase tracking-widest mb-4 text-center text-xl">League Table</h3>
+    <div className="w-full text-sm">
+      <h3 className="text-emerald-400 font-black uppercase tracking-widest mb-3 text-center text-lg">League Table</h3>
       <table className="w-full text-left text-slate-300">
         <thead className="text-xs text-slate-500 uppercase bg-slate-900/50">
           <tr>
-            <th className="px-3 py-3">#</th>
-            <th className="px-3 py-3">Team</th>
-            <th className="px-2 py-3 text-center" title="Games Played">GP</th>
-            <th className="px-2 py-3 text-center" title="Wins">W</th>
-            <th className="px-2 py-3 text-center" title="Draws">D</th>
-            <th className="px-2 py-3 text-center" title="Losses">L</th>
-            <th className="px-2 py-3 text-center" title="Goals For - Goals Against">GF - GA</th>
-            <th className="px-2 py-3 text-center" title="Goal Difference">GD</th>
-            <th className="px-3 py-3 text-center font-bold text-white">PTS</th>
+            <th className="px-2 py-2">#</th>
+            <th className="px-2 py-2">Team</th>
+            <th className="px-1 py-2 text-center" title="Games Played">GP</th>
+            <th className="px-1 py-2 text-center" title="Wins">W</th>
+            <th className="px-1 py-2 text-center" title="Draws">D</th>
+            <th className="px-1 py-2 text-center" title="Losses">L</th>
+            <th className="px-1 py-2 text-center" title="Goals For - Goals Against">GF - GA</th>
+            <th className="px-1 py-2 text-center" title="Goal Difference">GD</th>
+            <th className="px-2 py-2 text-center font-bold text-white">PTS</th>
           </tr>
         </thead>
         <tbody>
           {table.map((t, i) => (
             <tr key={t.name} className="border-b border-slate-800/50 last:border-0">
-              <td className="px-3 py-3 font-bold text-slate-500">{i + 1}</td>
-              <td className={`px-3 py-3 font-bold truncate max-w-[200px] ${
+              <td className="px-2 py-2 font-bold text-slate-500">{i + 1}</td>
+              <td className={`px-2 py-2 font-bold truncate max-w-[150px] ${
                 !seasonOver && t.name === currentMatch?.homeTeam ? 'text-emerald-400' : 
                 !seasonOver && t.name === currentMatch?.awayTeam ? 'text-cyan-400' : 
                 seasonOver && i === 0 ? 'text-yellow-400' :
@@ -530,13 +530,13 @@ export const CardHockeyTournament: React.FC<{ onBack: () => void }> = ({ onBack 
               }`}>
                 {formatTeamName(t.name)}
               </td>
-              <td className="px-2 py-3 text-center text-slate-400">{t.gp}</td>
-              <td className="px-2 py-3 text-center text-slate-400">{t.w}</td>
-              <td className="px-2 py-3 text-center text-slate-400">{t.d}</td>
-              <td className="px-2 py-3 text-center text-slate-400">{t.l}</td>
-              <td className="px-2 py-3 text-center text-slate-400 whitespace-nowrap">{t.gf} - {t.ga}</td>
-              <td className="px-2 py-3 text-center text-slate-400">{t.gd > 0 ? `+${t.gd}` : t.gd}</td>
-              <td className="px-3 py-3 text-center font-bold text-emerald-400 text-lg">{t.pts}</td>
+              <td className="px-1 py-2 text-center text-slate-400">{t.gp}</td>
+              <td className="px-1 py-2 text-center text-slate-400">{t.w}</td>
+              <td className="px-1 py-2 text-center text-slate-400">{t.d}</td>
+              <td className="px-1 py-2 text-center text-slate-400">{t.l}</td>
+              <td className="px-1 py-2 text-center text-slate-400 whitespace-nowrap">{t.gf} - {t.ga}</td>
+              <td className="px-1 py-2 text-center text-slate-400">{t.gd > 0 ? `+${t.gd}` : t.gd}</td>
+              <td className="px-2 py-2 text-center font-bold text-emerald-400 text-base">{t.pts}</td>
             </tr>
           ))}
         </tbody>
