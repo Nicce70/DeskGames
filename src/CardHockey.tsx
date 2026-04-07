@@ -82,6 +82,10 @@ export const CardHockey: React.FC<{
   onRestoreTournament?: () => void;
   onExportBackup?: () => void;
   onImportBackup?: () => void;
+  onEditTournament?: () => void;
+  alwaysUserStarts?: boolean;
+  currentRound?: number;
+  totalRounds?: number;
 }> = ({ 
   onBack,
   isTournament,
@@ -96,7 +100,11 @@ export const CardHockey: React.FC<{
   onSaveTournament,
   onRestoreTournament,
   onExportBackup,
-  onImportBackup
+  onImportBackup,
+  onEditTournament,
+  alwaysUserStarts,
+  currentRound,
+  totalRounds
 }) => {
   const [deck, setDeck] = useState<CardData[]>([]);
   const [discard, setDiscard] = useState<CardData[]>([]);
@@ -174,7 +182,13 @@ export const CardHockey: React.FC<{
     setDiscard([]);
     setDrawnCard(null);
     
-    const newStartingPlayer = isFirstGame ? 'user' : (matchStartingPlayer === 'user' ? 'app' : 'user');
+    let newStartingPlayer: 'user' | 'app';
+    if (alwaysUserStarts) {
+      newStartingPlayer = 'user';
+    } else {
+      newStartingPlayer = isFirstGame ? 'user' : (matchStartingPlayer === 'user' ? 'app' : 'user');
+    }
+    
     if (!isFirstGame) {
       setMatchStartingPlayer(newStartingPlayer);
     }
@@ -450,15 +464,15 @@ export const CardHockey: React.FC<{
           const defenseStrength = appG + ((appLD + appRD) / 2);
           
           if (cardsLeft > 30) {
-            shootThreshold = 12;
+            shootThreshold = 10;
           } else if (cardsLeft > 20) {
-            shootThreshold = 11;
-          } else if (cardsLeft > 12) {
             shootThreshold = 9;
+          } else if (cardsLeft > 12) {
+            shootThreshold = 8;
           } else if (cardsLeft > 6) {
-            shootThreshold = 7;
+            shootThreshold = 6;
           } else if (cardsLeft > 3) {
-            shootThreshold = 5;
+            shootThreshold = 4;
           } else {
             shootThreshold = 2; // Shoot with anything if deck is very low
           }
@@ -487,7 +501,8 @@ export const CardHockey: React.FC<{
           
           shootThreshold = Math.min(14, shootThreshold);
 
-          if (targets.includes('g') && val >= shootThreshold) {
+          // Always shoot with a Jack (11) or higher if the goalie is exposed
+          if (targets.includes('g') && (val >= 11 || val >= shootThreshold)) {
             chosenTarget = 'g';
           } else {
             const skaterTargets = targets.filter(t => t !== 'g');
@@ -499,7 +514,7 @@ export const CardHockey: React.FC<{
                 const targetCard = userTeamRef.current[t];
                 if (!targetCard) continue;
                 
-                let score = targetCard.value * 100; // Prioritize removing high-value cards
+                let score = targetCard.value * 200; // Prioritize removing high-value cards heavily
                 
                 const currentState = userTeamRef.current;
                 const nextState = { ...currentState, [t]: null };
@@ -520,9 +535,9 @@ export const CardHockey: React.FC<{
                 // If we are removing a forward, consider the strength of the defender behind them
                 // We want to expose WEAK defenders, so we give a bonus if the defender is weak
                 if (t === 'lf' && currentState.ld) {
-                  score += (15 - currentState.ld.value) * 50;
+                  score += (15 - currentState.ld.value) * 40;
                 } else if (t === 'rf' && currentState.rd) {
-                  score += (15 - currentState.rd.value) * 50;
+                  score += (15 - currentState.rd.value) * 40;
                 }
                 
                 if (score > bestScore) {
@@ -571,7 +586,8 @@ export const CardHockey: React.FC<{
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 text-center">
         {isTournament && (
           <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[8px] md:text-[10px] font-bold text-yellow-500/70 tracking-[0.2em] uppercase whitespace-nowrap">
-            Tournament
+            Tournament {currentRound && totalRounds ? `- Round ${currentRound} (of ${totalRounds})` : ''}
+            {currentRound && totalRounds && currentRound === totalRounds && <span className="text-red-500 ml-1">- Final Round</span>}
           </span>
         )}
         <h1 className="text-2xl md:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-400 to-cyan-500 tracking-widest uppercase drop-shadow-lg">
@@ -615,6 +631,18 @@ export const CardHockey: React.FC<{
                       className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors border-b border-slate-700"
                     >
                       Save Tournament
+                    </button>
+                  )}
+                  {onEditTournament && (
+                    <button 
+                      onClick={() => { 
+                        soundEngine.playClick(); 
+                        setShowMenu(false);
+                        onEditTournament(); 
+                      }} 
+                      className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white transition-colors border-b border-slate-700"
+                    >
+                      Edit Tournament
                     </button>
                   )}
                   {onRestoreTournament && (
